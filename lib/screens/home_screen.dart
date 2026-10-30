@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:http/http.dart' as http;
-import 'auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,104 +12,32 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final AudioPlayer _player = AudioPlayer();
   Timer? _syncTimer;
-  Timer? _refreshTimer;
 
-  // ВОТ ЭТИ ТРИ ПЕРЕМЕННЫЕ ТЫ СЛУЧАЙНО УДАЛИЛ:
-  bool _loading = false;
-  String? _error;
   String? _joinedUserId;
 
-  List<Map<String, dynamic>> _feed = [
-    {
-      'id': 'u1',
-      'username': 'Алексей',
-      'track_title': 'Lo-Fi Study',
-      'artist': 'Unknown',
-      'track_url':
-          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      'position_sec': 0,
-    },
-    {
-      'id': 'u2',
-      'username': 'Мария',
-      'track_title': 'Night Drive',
-      'artist': 'Unknown',
-      'track_url':
-          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-      'position_sec': 0,
-    },
-    {
-      'id': 'u3',
-      'username': 'Иван',
-      'track_title': 'Chill Vibes',
-      'artist': 'Unknown',
-      'track_url':
-          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-      'position_sec': 0,
-    },
-  ];
-
   @override
-  void initState() {
-    super.initState();
-    // _loadFeed(); // Отключено для теста без бэкенда
+  void dispose() {
+    _syncTimer?.cancel();
+    _player.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadFeed({bool silent = false}) async {
-    if (!silent) setState(() => _loading = true);
-    try {
-      final res = await http.get(
-        Uri.parse('${AuthService.baseUrl}/feed'),
-        headers: await AuthService.authHeaders(),
-      );
-      if (res.statusCode == 200) {
-        final List data = jsonDecode(res.body);
-        if (mounted) {
-          setState(() {
-            _feed = data.cast<Map<String, dynamic>>();
-            _error = null;
-          });
-        }
-      } else {
-        if (mounted) setState(() => _error = 'Ошибка ${res.statusCode}');
-      }
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Нет связи с сервером');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _joinWave(Map<String, dynamic> item) async {
-    if (_joinedUserId == item['id']) {
+  Future<void> _joinWave(
+    String userId,
+    String trackUrl,
+    int positionSec,
+  ) async {
+    if (_joinedUserId == userId) {
       await _leaveWave();
       return;
     }
 
     try {
-      // Временно убираем запрос к серверу для join, чтобы работало без бэкенда
-      int positionSec = item['position_sec'] ?? 0;
-
-      await _player.setUrl(item['track_url']);
+      await _player.setUrl(trackUrl);
       await _player.seek(Duration(seconds: positionSec));
       _player.play();
 
-      setState(() => _joinedUserId = item['id']);
-
-      _syncTimer?.cancel();
-      _syncTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
-        if (_player.position == null) return;
-        // Временно отключено для теста без сервера
-        /*
-        try {
-          await http.patch(
-            Uri.parse('${AuthService.baseUrl}/wave/sync'),
-            headers: await AuthService.authHeaders(),
-            body: jsonEncode({'position_sec': _player.position!.inSeconds}),
-          );
-        } catch (_) {}
-        */
-      });
+      setState(() => _joinedUserId = userId);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -124,24 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _leaveWave() async {
     _syncTimer?.cancel();
     await _player.stop();
-    // Временно отключено
-    /*
-    try {
-      await http.post(
-        Uri.parse('${AuthService.baseUrl}/wave/leave'),
-        headers: await AuthService.authHeaders(),
-      );
-    } catch (_) {}
-    */
     if (mounted) setState(() => _joinedUserId = null);
-  }
-
-  @override
-  void dispose() {
-    _syncTimer?.cancel();
-    _refreshTimer?.cancel();
-    _player.dispose();
-    super.dispose();
   }
 
   @override
@@ -156,10 +65,6 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Выйти из волны',
               onPressed: _leaveWave,
             ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _loadFeed(),
-          ),
         ],
       ),
       body: Column(
@@ -172,59 +77,64 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_error!),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _loadFeed,
-              child: const Text('Повторить'),
-            ),
-          ],
-        ),
-      );
-    }
-    if (_feed.isEmpty) {
-      return const Center(
-        child: Text('Пока никто не слушает. Запусти свою волну!'),
-      );
-    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('waves').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Ошибка: ${snapshot.error}'));
+        }
 
-    return RefreshIndicator(
-      onRefresh: () => _loadFeed(),
-      child: ListView.separated(
-        itemCount: _feed.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final item = _feed[index];
-          final isJoined = _joinedUserId == item['id'];
-          final username = (item['username'] ?? 'User') as String;
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.deepPurple.shade100,
-              child: Text(
-                username.isNotEmpty ? username[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.deepPurple),
-              ),
-            ),
-            title: Text(username),
-            subtitle: Text('${item['track_title']} • ${item['artist']}'),
-            trailing: ElevatedButton.icon(
-              onPressed: () => _joinWave(item),
-              icon: Icon(isJoined ? Icons.logout : Icons.headphones),
-              label: Text(isJoined ? 'Выйти' : 'Слушать'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isJoined ? Colors.grey : Colors.deepPurple,
-                foregroundColor: Colors.white,
-              ),
-            ),
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text('Пока никто не слушает. Запусти свою волну!'),
           );
-        },
-      ),
+        }
+
+        final waves = snapshot.data!.docs;
+
+        return ListView.separated(
+          itemCount: waves.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final data = waves[index].data() as Map<String, dynamic>;
+            final id = waves[index].id;
+            final isJoined = _joinedUserId == id;
+            final username = (data['username'] ?? 'User') as String;
+
+            int positionSec = data['position_sec'] ?? 0;
+            if (data['started_at'] != null) {
+              final startTime = (data['started_at'] as Timestamp).toDate();
+              final now = DateTime.now();
+              positionSec += now.difference(startTime).inSeconds;
+            }
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.deepPurple.shade100,
+                child: Text(
+                  username.isNotEmpty ? username[0].toUpperCase() : '?',
+                  style: const TextStyle(color: Colors.deepPurple),
+                ),
+              ),
+              title: Text(username),
+              subtitle: Text('${data['track_title']} • ${data['artist']}'),
+              trailing: ElevatedButton.icon(
+                onPressed: () => _joinWave(id, data['track_url'], positionSec),
+                icon: Icon(isJoined ? Icons.logout : Icons.headphones),
+                label: Text(isJoined ? 'Выйти' : 'Слушать'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isJoined ? Colors.grey : Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

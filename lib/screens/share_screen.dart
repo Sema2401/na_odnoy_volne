@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ShareScreen extends StatefulWidget {
   const ShareScreen({super.key});
@@ -21,23 +23,24 @@ class _ShareScreenState extends State<ShareScreen> {
   Future<void> _toggleShare() async {
     setState(() => _loading = true);
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
       if (!_isSharing) {
-        final res = await http.post(
-          Uri.parse('${AuthService.baseUrl}/wave/start'),
-          headers: await AuthService.authHeaders(),
-          body: jsonEncode({
-            'track_title': _trackCtrl.text,
-            'artist': _artistCtrl.text,
-            'track_url': _urlCtrl.text,
-            'position_sec': 0,
-          }),
-        );
-        if (res.statusCode == 200) setState(() => _isSharing = true);
+        await FirebaseFirestore.instance.collection('waves').doc(user.uid).set({
+          'username': user.email?.split('@').first ?? 'User',
+          'track_title': _trackCtrl.text,
+          'artist': _artistCtrl.text,
+          'track_url': _urlCtrl.text,
+          'position_sec': 0,
+          'started_at': FieldValue.serverTimestamp(),
+        });
+        setState(() => _isSharing = true);
       } else {
-        await http.post(
-          Uri.parse('${AuthService.baseUrl}/wave/stop'),
-          headers: await AuthService.authHeaders(),
-        );
+        await FirebaseFirestore.instance
+            .collection('waves')
+            .doc(user.uid)
+            .delete();
         setState(() => _isSharing = false);
       }
     } catch (e) {

@@ -9,24 +9,40 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailCtrl = TextEditingController(text: 'test@test.com');
-  final _passCtrl = TextEditingController(text: '123456');
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
-  Future<void> _handleLogin() async {
+  bool _isLogin = true;
+
+  Future<void> _handleSubmit() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-    final ok = await AuthService.login(_emailCtrl.text.trim(), _passCtrl.text);
+
+    final email = _emailCtrl.text.trim();
+    final password = _passCtrl.text;
+
+    bool success;
+    if (_isLogin) {
+      success = await AuthService.login(email, password);
+    } else {
+      success = await AuthService.register(email, password);
+    }
+
     if (!mounted) return;
     setState(() => _loading = false);
 
-    if (ok) {
+    if (success) {
       context.go('/home');
     } else {
-      setState(() => _error = 'Неверный логин или пароль');
+      setState(
+        () => _error = _isLogin
+            ? 'Неверный логин или пароль'
+            : 'Ошибка регистрации (возможно, email занят или пароль < 6 символов)',
+      );
     }
   }
 
@@ -42,10 +58,13 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Icon(Icons.waves, size: 72, color: Colors.deepPurple),
               const SizedBox(height: 16),
-              const Text(
-                'На одной волне',
+              Text(
+                _isLogin ? 'Вход' : 'Регистрация',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 32),
               TextField(
@@ -71,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: _loading ? null : _handleLogin,
+                onPressed: _loading ? null : _handleSubmit,
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -84,7 +103,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Войти'),
+                    : Text(_isLogin ? 'Войти' : 'Зарегистрироваться'),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        setState(() {
+                          _isLogin = !_isLogin;
+                          _error = null;
+                        });
+                      },
+                child: Text(
+                  _isLogin
+                      ? 'Нет аккаунта? Зарегистрироваться'
+                      : 'Уже есть аккаунт? Войти',
+                ),
               ),
             ],
           ),

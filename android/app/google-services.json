@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "600943066098",
+    "project_id": "on-the-same-wavelength",
+    "storage_bucket": "on-the-same-wavelength.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:600943066098:android:cc03f1d7b4d9ad6ae8496b",
+        "android_client_info": {
+          "package_name": "com.example.na_odnoy_volne"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk70zbpZ-iBHF3kYZjZ3Q2cut1utnuKK0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
