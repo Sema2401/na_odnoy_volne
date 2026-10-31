@@ -94,7 +94,14 @@ class _ShareScreenState extends State<ShareScreen> {
         );
       }
     } catch (e) {
-      // ... обработка ошибки
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при отправке: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       setState(() => _loading = false);
     }

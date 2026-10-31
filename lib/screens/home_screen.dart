@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'audio_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,15 +14,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _loading = false;
-  final AudioPlayer _player = AudioPlayer();
+
+  final GlobalAudioService _audioService = GlobalAudioService();
   Timer? _syncTimer;
 
-  String? _joinedUserId;
+  @override
+  void initState() {
+    super.initState();
+    if (_audioService.player.playing ||
+        _audioService.currentJoinedUserId != null) {
+      setState(() {});
+    }
+  }
 
   @override
   void dispose() {
     _syncTimer?.cancel();
-    _player.dispose();
     super.dispose();
   }
 
@@ -31,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String title,
     int positionSec,
   ) async {
-    if (_joinedUserId == userId) {
+    if (_audioService.currentJoinedUserId == userId) {
       await _leaveWave();
       return;
     }
@@ -47,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final query = Uri.encodeComponent('$artist $title');
       final res = await http
-          .get(Uri.parse('http://172.20.10.2:8000/search?query=$query'))
+          .get(Uri.parse('http://153.80.251.185:8000/search?query=$query'))
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -55,12 +63,13 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data['error'] == null) {
           final trackUrl = data['url'];
 
-          await _player.stop();
-          await _player.setUrl(trackUrl);
-          await _player.seek(Duration(seconds: positionSec));
-          _player.play();
+          final encodedUrl = Uri.encodeComponent(trackUrl);
+          final streamUrl = 'http://153.80.251.185:8000/stream?url=$encodedUrl';
 
-          setState(() => _joinedUserId = userId);
+          await _audioService.playTrack(streamUrl, positionSec);
+          _audioService.currentJoinedUserId = userId;
+
+          setState(() {});
           return;
         } else {
           throw Exception(data['error']);
@@ -80,17 +89,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _leaveWave() async {
     _syncTimer?.cancel();
-    await _player.stop();
-    if (mounted) setState(() => _joinedUserId = null);
+    await _audioService.stop();
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final joinedId = _audioService.currentJoinedUserId;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Сейчас слушают'),
         actions: [
-          if (_joinedUserId != null)
+          if (joinedId != null)
             IconButton(
               icon: const Icon(Icons.exit_to_app),
               tooltip: 'Выйти из волны',
@@ -100,14 +111,14 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          if (_joinedUserId != null) _buildNowPlayingBar(),
-          Expanded(child: _buildBody()),
+          if (joinedId != null) _buildNowPlayingBar(),
+          Expanded(child: _buildBody(joinedId)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(String? joinedId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('waves')
@@ -145,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
           itemBuilder: (context, index) {
             final data = waves[index].data() as Map<String, dynamic>;
             final id = waves[index].id;
-            final isJoined = _joinedUserId == id;
+            final isJoined = joinedId == id;
             final username = (data['username'] ?? 'User') as String;
 
             int positionSec = data['position_sec'] ?? 0;
@@ -207,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+              stream: _audioService.player.playerStateStream,
               builder: (context, snap) {
                 final playing = snap.data?.playing ?? false;
                 return Text(
@@ -219,17 +230,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+              stream: _audioService.player.playerStateStream,
               builder: (context, snap) {
                 final playing = snap.data?.playing ?? false;
                 return Icon(playing ? Icons.pause : Icons.play_arrow);
               },
             ),
             onPressed: () {
-              if (_player.playing) {
-                _player.pause();
+              if (_audioService.player.playing) {
+                _audioService.player.pause();
               } else {
-                _player.play();
+                _audioService.player.play();
               }
             },
           ),
