@@ -8,8 +8,8 @@ class GlobalAudioService {
   final AudioPlayer player = AudioPlayer(
     audioLoadConfiguration: AudioLoadConfiguration(
       androidLoadControl: AndroidLoadControl(
-        minBufferDuration: const Duration(seconds: 5),
-        maxBufferDuration: const Duration(seconds: 15),
+        minBufferDuration: const Duration(seconds: 3),
+        maxBufferDuration: const Duration(seconds: 10),
         bufferForPlaybackDuration: const Duration(seconds: 1),
         bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3),
       ),
@@ -20,7 +20,7 @@ class GlobalAudioService {
 
   Future<void> playTrack(String url, int positionSec) async {
     await player.stop();
-    await player.setUrl(url);
+    await player.setUrl(url).timeout(const Duration(seconds: 15));
     await player.seek(Duration(seconds: positionSec));
     player.play();
   }
