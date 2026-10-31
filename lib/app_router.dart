@@ -54,10 +54,15 @@ class _ScaffoldWithNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = _indexFromLocation(state.matchedLocation);
+
     return Scaffold(
-      body: child,
+      body: IndexedStack(
+        index: currentIndex,
+        children: const [HomeScreen(), ShareScreen(), ProfileScreen()],
+      ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _indexFromLocation(state.matchedLocation),
+        currentIndex: currentIndex,
         selectedItemColor: Colors.deepPurple,
         onTap: (i) {
           const routes = ['/home', '/share', '/profile'];

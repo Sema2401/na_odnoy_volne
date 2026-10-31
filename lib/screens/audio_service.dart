@@ -5,19 +5,22 @@ class GlobalAudioService {
   factory GlobalAudioService() => _instance;
   GlobalAudioService._internal();
 
-  final AudioPlayer player = AudioPlayer();
+  final AudioPlayer player = AudioPlayer(
+    audioLoadConfiguration: AudioLoadConfiguration(
+      androidLoadControl: AndroidLoadControl(
+        minBufferDuration: const Duration(seconds: 5),
+        maxBufferDuration: const Duration(seconds: 15),
+        bufferForPlaybackDuration: const Duration(seconds: 1),
+        bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3),
+      ),
+    ),
+  );
 
   String? currentJoinedUserId;
 
   Future<void> playTrack(String url, int positionSec) async {
     await player.stop();
-    await player.setUrl(
-      url,
-      headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    );
+    await player.setUrl(url);
     await player.seek(Duration(seconds: positionSec));
     player.play();
   }
