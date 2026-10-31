@@ -1,4 +1,4 @@
-import 'dart:async'; // Импортируем для StreamSubscription
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nowplaying/nowplaying.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -20,6 +20,7 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _isSharing = false;
 
   StreamSubscription? _nowPlayingSubscription;
+  bool _npStarted = false;
 
   @override
   void initState() {
@@ -31,72 +32,104 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   void dispose() {
     _nowPlayingSubscription?.cancel();
+    if (_npStarted) {
+      NowPlaying.instance.stop();
+    }
     super.dispose();
   }
 
   Future<void> _checkIfAlreadySharing() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+    if (user == null) return;
+    try {
       final doc = await FirebaseFirestore.instance
           .collection('waves')
           .doc(user.uid)
           .get();
-      if (doc.exists) {
-        if (mounted) setState(() => _isSharing = true);
+      if (mounted && doc.exists) {
+        setState(() => _isSharing = true);
       }
+    } catch (_) {
+      //
     }
   }
 
   Future<void> _initNowPlaying() async {
     _hasPermission = await NowPlaying.instance.isEnabled();
-
     if (!mounted) return;
 
-    if (_hasPermission) {
-      _nowPlayingSubscription?.cancel();
+    if (!_hasPermission) {
+      setState(() => _loading = false);
+      return;
+    }
 
-      setState(() => _loading = true);
+    await _nowPlayingSubscription?.cancel();
+    _nowPlayingSubscription = null;
+    if (_npStarted) {
+      NowPlaying.instance.stop();
+      _npStarted = false;
+    }
 
+    setState(() {
+      _loading = true;
+      _title = 'Слушаем...';
+      _artist = '';
+    });
+
+    try {
       await NowPlaying.instance.start();
+      _npStarted = true;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _title = 'Ничего не играет';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось запустить NowPlaying: $e')),
+        );
+      }
+      return;
+    }
 
-      _nowPlayingSubscription = NowPlaying.instance.stream.listen((track) {
-        if (mounted) {
+    _nowPlayingSubscription = NowPlaying.instance.stream.listen(
+      (track) {
+        if (!mounted) return;
+        if (track.title != null && track.title!.isNotEmpty) {
           setState(() {
-            _title = (track.title != null && track.title!.isNotEmpty)
-                ? track.title!
-                : 'Ничего не играет';
-            _artist = (track.artist != null && track.artist!.isNotEmpty)
-                ? track.artist!
-                : '';
+            _title = track.title!;
+            _artist = track.artist ?? '';
             _loading = false;
           });
         }
-      });
+      },
+      onError: (_) {
+        if (mounted) setState(() => _loading = false);
+      },
+    );
 
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _loading) {
-          setState(() => _loading = false);
-        }
-      });
-    } else {
-      if (mounted) setState(() => _loading = false);
-    }
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _loading) setState(() => _loading = false);
+    });
   }
 
   Future<void> _requestPermission() async {
     await NowPlaying.instance.requestPermissions();
     _hasPermission = await NowPlaying.instance.isEnabled();
-
     if (!mounted) return;
-
     if (_hasPermission) {
-      _initNowPlaying();
+      await _initNowPlaying();
+    } else {
+      setState(() {});
     }
-    setState(() {});
   }
 
   Future<void> _shareToFirestore() async {
-    if (_title == 'Ничего не играет' || _title == 'Неизвестный трек') return;
+    if (_title == 'Ничего не играет' ||
+        _title == 'Неизвестный трек' ||
+        _title == 'Слушаем...') {
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -121,10 +154,7 @@ class _ShareScreenState extends State<ShareScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при отправке: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -143,7 +173,6 @@ class _ShareScreenState extends State<ShareScreen> {
             .delete();
       }
       if (mounted) setState(() => _isSharing = false);
-
       await GlobalAudioService().stop();
     } catch (e) {
       if (mounted) {
@@ -193,10 +222,19 @@ class _ShareScreenState extends State<ShareScreen> {
         children: [
           const Icon(Icons.graphic_eq, size: 64, color: Colors.deepPurple),
           const SizedBox(height: 24),
-          const Text(
-            'Сейчас в твоем телефоне играет:',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Сейчас в твоем телефоне играет:',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.grey),
+                tooltip: 'Обновить',
+                onPressed: _initNowPlaying,
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Text(
@@ -210,7 +248,6 @@ class _ShareScreenState extends State<ShareScreen> {
             style: const TextStyle(fontSize: 18, color: Colors.deepPurple),
           ),
           const SizedBox(height: 48),
-
           if (!_isSharing)
             FilledButton.icon(
               onPressed: _shareToFirestore,
@@ -231,7 +268,6 @@ class _ShareScreenState extends State<ShareScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
-
           if (_isSharing) ...[
             const SizedBox(height: 16),
             const Text(

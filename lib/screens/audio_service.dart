@@ -20,13 +20,28 @@ class GlobalAudioService {
 
   Future<void> playTrack(String url, int positionSec) async {
     await player.stop();
-    await player.setUrl(url).timeout(const Duration(seconds: 15));
-    await player.seek(Duration(seconds: positionSec));
+
+    await player.setUrl(url).timeout(const Duration(seconds: 20));
+
+    if (positionSec > 0) {
+      final dur = player.duration;
+      final target = (dur != null && positionSec >= dur.inSeconds)
+          ? dur.inSeconds - 1
+          : positionSec;
+      if (target > 0) {
+        try {
+          await player.seek(Duration(seconds: target));
+        } catch (_) {}
+      }
+    }
+
     player.play();
   }
 
   Future<void> stop() async {
-    await player.stop();
+    try {
+      await player.stop();
+    } catch (_) {}
     currentJoinedUserId = null;
   }
 }

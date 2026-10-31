@@ -16,20 +16,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = false;
 
   final GlobalAudioService _audioService = GlobalAudioService();
-  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
-    if (_audioService.player.playing ||
-        _audioService.currentJoinedUserId != null) {
-      setState(() {});
-    }
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     super.dispose();
   }
 
@@ -56,26 +50,29 @@ class _HomeScreenState extends State<HomeScreen> {
       final query = Uri.encodeComponent('$artist $title');
       final res = await http
           .get(Uri.parse('http://153.80.251.185:8000/search?query=$query'))
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 12));
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['error'] == null) {
-          final trackUrl = data['url'];
-
-          final encodedUrl = Uri.encodeComponent(trackUrl);
-          final streamUrl = 'http://153.80.251.185:8000/stream?url=$encodedUrl';
-
-          await _audioService.playTrack(streamUrl, positionSec);
-          _audioService.currentJoinedUserId = userId;
-
-          setState(() {});
-          return;
-        } else {
-          throw Exception(data['error']);
-        }
+      if (res.statusCode != 200) {
+        throw Exception('Сервер вернул код ${res.statusCode}');
       }
-      throw Exception('Сервер вернул код ${res.statusCode}');
+
+      final data = jsonDecode(res.body);
+      if (data['error'] != null) {
+        throw Exception(data['error']);
+      }
+
+      final trackUrl = data['url'];
+      if (trackUrl == null || (trackUrl as String).isEmpty) {
+        throw Exception('Сервер не вернул URL трека');
+      }
+
+      final encodedUrl = Uri.encodeComponent(trackUrl);
+      final streamUrl = 'http://153.80.251.185:8000/stream?url=$encodedUrl';
+
+      await _audioService.playTrack(streamUrl, positionSec);
+      _audioService.currentJoinedUserId = userId;
+
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _leaveWave() async {
-    _syncTimer?.cancel();
     await _audioService.stop();
     if (mounted) setState(() {});
   }
@@ -220,10 +216,37 @@ class _HomeScreenState extends State<HomeScreen> {
             child: StreamBuilder<PlayerState>(
               stream: _audioService.player.playerStateStream,
               builder: (context, snap) {
-                final playing = snap.data?.playing ?? false;
-                return Text(
-                  playing ? 'Слушаем вместе...' : 'Пауза',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                final state = snap.data;
+                final playing = state?.playing ?? false;
+                final processing = state?.processingState;
+
+                String label;
+                if (processing == ProcessingState.loading ||
+                    processing == ProcessingState.buffering) {
+                  label = 'Буферизация...';
+                } else if (!playing) {
+                  label = 'Пауза';
+                } else {
+                  label = 'Слушаем вместе...';
+                }
+
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (processing == ProcessingState.loading ||
+                        processing == ProcessingState.buffering) ...[
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      label,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 );
               },
             ),
@@ -236,10 +259,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 return Icon(playing ? Icons.pause : Icons.play_arrow);
               },
             ),
-            onPressed: () {
+            onPressed: () async {
               if (_audioService.player.playing) {
-                _audioService.player.pause();
+                await _audioService.player.pause();
               } else {
+                // ignore: unawaited_futures
                 _audioService.player.play();
               }
             },
