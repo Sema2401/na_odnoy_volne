@@ -3,12 +3,12 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services") // Добавлено для Firebase
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.na_odnoy_volne" // Убедись, что тут твой package name
-    compileSdk = flutter.compileSdkVersion
+    namespace = "com.example.na_odnoy_volne" 
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -40,4 +40,27 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.whenTaskAdded {
+    if (name == "assembleRelease" || name == "assembleDebug") {
+        doLast {
+            val buildType = if (name.contains("Release")) "release" else "debug"
+            val apkName = "app-$buildType.apk"
+
+            val sourceDir = file("$buildDir/outputs/apk/$buildType")
+            val sourceFile = file("$sourceDir/$apkName")
+
+            val targetDir = file("${rootProject.projectDir.parentFile}/build/app/outputs/flutter-apk")
+            val targetFile = file("$targetDir/$apkName")
+            
+            if (sourceFile.exists()) {
+                targetDir.mkdirs()
+                sourceFile.copyTo(targetFile, overwrite = true)
+                println("✅ APK успешно скопирован в: $targetFile")
+            } else {
+                println("⚠️ Не удалось найти APK в: $sourceFile")
+            }
+        }
+    }
 }

@@ -15,15 +15,24 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.value(newBuildDir)
+subprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
+            extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
+                compileSdkVersion(36)
+                buildToolsVersion("36.0.0")
+            }
+        }
+    }
+}
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-subprojects {
     project.evaluationDependsOn(":app")
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        compilerOptions {
+            freeCompilerArgs.add("-Xskip-metadata-version-check")
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

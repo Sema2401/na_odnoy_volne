@@ -1,3 +1,5 @@
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -10,6 +12,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool _loading = false;
   final AudioPlayer _player = AudioPlayer();
   Timer? _syncTimer;
 
@@ -24,7 +27,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _joinWave(
     String userId,
-    String trackUrl,
+    String artist,
+    String title,
     int positionSec,
   ) async {
     if (_joinedUserId == userId) {
@@ -32,18 +36,45 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    try {
-      await _player.setUrl(trackUrl);
-      await _player.seek(Duration(seconds: positionSec));
-      _player.play();
+    setState(() => _loading = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Загружаем трек...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
 
-      setState(() => _joinedUserId = userId);
+    try {
+      final query = Uri.encodeComponent('$artist $title');
+      final res = await http
+          .get(Uri.parse('http://172.20.10.2:8000/search?query=$query'))
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['error'] == null) {
+          final trackUrl = data['url'];
+
+          await _player.stop();
+          await _player.setUrl(trackUrl);
+          await _player.seek(Duration(seconds: positionSec));
+          _player.play();
+
+          setState(() => _joinedUserId = userId);
+          return;
+        } else {
+          throw Exception(data['error']);
+        }
+      }
+      throw Exception('Сервер вернул код ${res.statusCode}');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка воспроизведения: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -78,14 +109,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBody() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('waves').snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('waves')
+          .snapshots(includeMetadataChanges: false),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Ошибка: ${snapshot.error}'));
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Ищем, кто сейчас в эфире...'),
+              ],
+            ),
+          );
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) {
+          return Center(child: Text('Ошибка: ${snapshot.error}'));
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -123,8 +166,24 @@ class _HomeScreenState extends State<HomeScreen> {
               title: Text(username),
               subtitle: Text('${data['track_title']} • ${data['artist']}'),
               trailing: ElevatedButton.icon(
-                onPressed: () => _joinWave(id, data['track_url'], positionSec),
-                icon: Icon(isJoined ? Icons.logout : Icons.headphones),
+                onPressed: _loading
+                    ? null
+                    : () => _joinWave(
+                        id,
+                        data['artist'] ?? '',
+                        data['track_title'] ?? '',
+                        positionSec,
+                      ),
+                icon: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(isJoined ? Icons.logout : Icons.headphones),
                 label: Text(isJoined ? 'Выйти' : 'Слушать'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isJoined ? Colors.grey : Colors.deepPurple,
