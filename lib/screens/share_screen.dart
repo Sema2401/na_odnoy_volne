@@ -1,3 +1,4 @@
+import 'dart:async'; // Импортируем для StreamSubscription
 import 'package:flutter/material.dart';
 import 'package:nowplaying/nowplaying.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,11 +19,19 @@ class _ShareScreenState extends State<ShareScreen> {
   bool _loading = true;
   bool _isSharing = false;
 
+  StreamSubscription? _nowPlayingSubscription;
+
   @override
   void initState() {
     super.initState();
     _checkIfAlreadySharing();
     _initNowPlaying();
+  }
+
+  @override
+  void dispose() {
+    _nowPlayingSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkIfAlreadySharing() async {
@@ -33,7 +42,7 @@ class _ShareScreenState extends State<ShareScreen> {
           .doc(user.uid)
           .get();
       if (doc.exists) {
-        setState(() => _isSharing = true);
+        if (mounted) setState(() => _isSharing = true);
       }
     }
   }
@@ -41,14 +50,21 @@ class _ShareScreenState extends State<ShareScreen> {
   Future<void> _initNowPlaying() async {
     _hasPermission = await NowPlaying.instance.isEnabled();
 
+    if (!mounted) return;
+
     if (_hasPermission) {
+      _nowPlayingSubscription?.cancel();
+
+      setState(() => _loading = true);
+
       await NowPlaying.instance.start();
-      NowPlaying.instance.stream.listen((track) {
+
+      _nowPlayingSubscription = NowPlaying.instance.stream.listen((track) {
         if (mounted) {
           setState(() {
             _title = (track.title != null && track.title!.isNotEmpty)
                 ? track.title!
-                : 'Неизвестный трек';
+                : 'Ничего не играет';
             _artist = (track.artist != null && track.artist!.isNotEmpty)
                 ? track.artist!
                 : '';
@@ -56,14 +72,23 @@ class _ShareScreenState extends State<ShareScreen> {
           });
         }
       });
+
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _loading) {
+          setState(() => _loading = false);
+        }
+      });
     } else {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _requestPermission() async {
     await NowPlaying.instance.requestPermissions();
     _hasPermission = await NowPlaying.instance.isEnabled();
+
+    if (!mounted) return;
+
     if (_hasPermission) {
       _initNowPlaying();
     }
@@ -87,9 +112,8 @@ class _ShareScreenState extends State<ShareScreen> {
         'started_at': FieldValue.serverTimestamp(),
       });
 
-      setState(() => _isSharing = true);
-
       if (mounted) {
+        setState(() => _isSharing = true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ты в эфире! Трек отправлен в ленту.')),
         );
@@ -104,7 +128,7 @@ class _ShareScreenState extends State<ShareScreen> {
         );
       }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -118,7 +142,7 @@ class _ShareScreenState extends State<ShareScreen> {
             .doc(user.uid)
             .delete();
       }
-      setState(() => _isSharing = false);
+      if (mounted) setState(() => _isSharing = false);
 
       await GlobalAudioService().stop();
     } catch (e) {
@@ -128,7 +152,7 @@ class _ShareScreenState extends State<ShareScreen> {
         ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
