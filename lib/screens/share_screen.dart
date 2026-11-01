@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:nowplaying/nowplaying.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+<<<<<<< HEAD
 import 'audio_service.dart';
+=======
+import '../logic/genre_service.dart';
+>>>>>>> 679d0f4 (сделал систему жанров (не тестировалось))
 
 class ShareScreen extends StatefulWidget {
   const ShareScreen({super.key});
@@ -136,10 +140,14 @@ class _ShareScreenState extends State<ShareScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
+      final genre = await GenreService.instance.resolveTrackGenre(_artist, _title);
+
       await FirebaseFirestore.instance.collection('waves').doc(user.uid).set({
         'username': user.email?.split('@').first ?? 'User',
         'track_title': _title,
         'artist': _artist,
+        'genre': genre.id,
+        'genre_label': genre.label,
         'track_url': '',
         'position_sec': 0,
         'started_at': FieldValue.serverTimestamp(),
