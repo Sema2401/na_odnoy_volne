@@ -72,6 +72,11 @@ class WaveFilter extends ChangeNotifier {
         filtered.sort(_byNewest);
       case WaveSort.genre:
         filtered.sort((a, b) {
+          // «Другое» всегда в конце списка
+          final aUnknown = a.genre.id == GenreTag.unknown.id;
+          final bUnknown = b.genre.id == GenreTag.unknown.id;
+          if (aUnknown != bUnknown) return aUnknown ? 1 : -1;
+
           final byGenre =
               a.genre.label.toLowerCase().compareTo(b.genre.label.toLowerCase());
           return byGenre != 0 ? byGenre : _byNewest(a, b);
