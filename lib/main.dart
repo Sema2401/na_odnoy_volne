@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'app_router.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,11 +33,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'На одной волне',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark,
       routerConfig: AppRouter.router,
+      builder: (context, child) {
+        return NeonBackground(child: child ?? const SizedBox.shrink());
+      },
     );
   }
 }

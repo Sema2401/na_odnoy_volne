@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'auth_service.dart';
+import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -13,8 +15,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
-
   bool _isLogin = true;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleSubmit() async {
     setState(() {
@@ -49,79 +57,148 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.waves, size: 72, color: Colors.deepPurple),
-              const SizedBox(height: 16),
-              Text(
-                _isLogin ? 'Вход' : 'Регистрация',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom -
+                    48,
               ),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Пароль',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _loading ? null : _handleSubmit,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.pink, width: 2),
+                      boxShadow: AppTheme.glow,
+                    ),
+                    child: const Icon(
+                      Icons.waves,
+                      size: 56,
+                      color: AppTheme.pink,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ShaderMask(
+                    shaderCallback: (bounds) =>
+                        AppTheme.grad.createShader(bounds),
+                    child: const Text(
+                      'На одной волне',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.white,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isLogin
+                        ? 'Войди, чтобы слушать вместе'
+                        : 'Создай аккаунт и начни слушать',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.muted,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+                  TextField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: AppTheme.text),
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon:
+                          Icon(Icons.mail_outline, color: AppTheme.muted),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: AppTheme.text),
+                    decoration: const InputDecoration(
+                      labelText: 'Пароль',
+                      prefixIcon:
+                          Icon(Icons.lock_outline, color: AppTheme.muted),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 54,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.grad,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: AppTheme.glow,
+                      ),
+                      child: FilledButton(
+                        onPressed: _loading ? null : _handleSubmit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
                         ),
-                      )
-                    : Text(_isLogin ? 'Войти' : 'Зарегистрироваться'),
+                        child: _loading
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                _isLogin ? 'Войти' : 'Зарегистрироваться',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            setState(() {
+                              _isLogin = !_isLogin;
+                              _error = null;
+                            });
+                          },
+                    child: Text(
+                      _isLogin
+                          ? 'Нет аккаунта? Зарегистрироваться'
+                          : 'Уже есть аккаунт? Войти',
+                      style: const TextStyle(color: AppTheme.muted),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _loading
-                    ? null
-                    : () {
-                        setState(() {
-                          _isLogin = !_isLogin;
-                          _error = null;
-                        });
-                      },
-                child: Text(
-                  _isLogin
-                      ? 'Нет аккаунта? Зарегистрироваться'
-                      : 'Уже есть аккаунт? Войти',
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
