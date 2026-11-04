@@ -1,14 +1,16 @@
 import 'genre_tag.dart';
 
-/// Одна трансляция («плейлист» — трек, который сейчас транслирует пользователь).
 class Wave {
-  final String id; // uid транслирующего
+  final String id;
   final String username;
   final String title;
   final String artist;
   final GenreTag genre;
   final int positionSec;
   final DateTime? startedAt;
+
+  final bool isPlaying;
+  final DateTime? pausedAt;
 
   const Wave({
     required this.id,
@@ -18,11 +20,16 @@ class Wave {
     required this.genre,
     required this.positionSec,
     required this.startedAt,
+    this.isPlaying = true,
+    this.pausedAt,
   });
 
-  /// [data] — содержимое документа waves/{uid}; [startedAt] уже переведён из Timestamp.
-  /// У старых записей без жанра получится [GenreTag.unknown].
-  factory Wave.fromMap(String id, Map<String, dynamic> data, {DateTime? startedAt}) {
+  factory Wave.fromMap(
+    String id,
+    Map<String, dynamic> data, {
+    DateTime? startedAt,
+    DateTime? pausedAt,
+  }) {
     final genreId = data['genre'] as String?;
     final genre = (genreId == null || genreId.isEmpty)
         ? GenreTag.unknown
@@ -36,12 +43,20 @@ class Wave {
       genre: genre,
       positionSec: (data['position_sec'] ?? 0) as int,
       startedAt: startedAt,
+      isPlaying: (data['is_playing'] ?? true) as bool,
+      pausedAt: pausedAt,
     );
   }
 
-  /// Позиция воспроизведения на момент [now] (та же формула, что сейчас в home_screen).
   int currentPositionSec({DateTime? now}) {
     if (startedAt == null) return positionSec;
-    return positionSec + (now ?? DateTime.now()).difference(startedAt!).inSeconds;
+
+    if (!isPlaying && pausedAt != null) {
+      final diff = pausedAt!.difference(startedAt!).inSeconds;
+      return positionSec + (diff > 0 ? diff : 0);
+    }
+
+    final diff = (now ?? DateTime.now()).difference(startedAt!).inSeconds;
+    return positionSec + (diff > 0 ? diff : 0);
   }
 }

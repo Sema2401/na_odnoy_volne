@@ -27,15 +27,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loadingJoin = false;
   String? _loadingWaveId;
+  String? _currentlyPlayingTitle;
+  bool _isUpdatingTrack = false;
+
+  StreamSubscription<DocumentSnapshot>? _waveSubscription;
 
   @override
   void dispose() {
+    _waveSubscription?.cancel();
     _filter.dispose();
     super.dispose();
   }
 
-  Future<void> _joinWave(Wave wave) async {
-    if (_audio.currentJoinedUserId == wave.id) {
+  Future<void> _joinWave(Wave wave, {bool isUpdate = false}) async {
+    if (_isUpdatingTrack) return;
+
+    if (!isUpdate && _audio.currentJoinedUserId == wave.id) {
       await _leaveWave();
       return;
     }
@@ -43,14 +50,17 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _loadingJoin = true;
       _loadingWaveId = wave.id;
+      _isUpdatingTrack = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Загружаем трек...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    if (!isUpdate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Загружаем трек...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
 
     try {
       final query = Uri.encodeComponent('${wave.artist} ${wave.title}');
@@ -77,7 +87,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final positionSec = wave.currentPositionSec();
       await _audio.playTrack(streamUrl, positionSec);
+
       _audio.currentJoinedUserId = wave.id;
+      _currentlyPlayingTitle = wave.title;
+
+      _listenToJoinedWave(wave.id);
+
+      if (!wave.isPlaying) {
+        await _audio.player.pause();
+      }
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -91,14 +109,64 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _loadingJoin = false;
           _loadingWaveId = null;
+          _isUpdatingTrack = false;
         });
       }
     }
   }
 
   Future<void> _leaveWave() async {
+    _waveSubscription?.cancel();
     await _audio.stop();
+    _currentlyPlayingTitle = null;
     if (mounted) setState(() {});
+  }
+
+  // Слушаем конкретный документ волны (своего диджея)
+  void _listenToJoinedWave(String joinedId) {
+    _waveSubscription?.cancel();
+    _waveSubscription = FirebaseFirestore.instance
+        .collection('waves')
+        .doc(joinedId)
+        .snapshots()
+        .listen((doc) {
+          if (!doc.exists || !mounted) return;
+
+          final data = doc.data() as Map<String, dynamic>;
+          final ts = data['started_at'];
+          final pTs = data['paused_at'];
+
+          final liveWave = Wave.fromMap(
+            doc.id,
+            data,
+            startedAt: ts is Timestamp ? ts.toDate() : null,
+            pausedAt: pTs is Timestamp ? pTs.toDate() : null,
+          );
+
+          _handleLiveUpdates(liveWave);
+        });
+  }
+
+  void _handleLiveUpdates(Wave liveWave) {
+    if (!mounted || _audio.currentJoinedUserId != liveWave.id) return;
+
+    if (liveWave.isPlaying && !_audio.player.playing) {
+      _audio.player.play();
+    } else if (!liveWave.isPlaying && _audio.player.playing) {
+      _audio.player.pause();
+    }
+
+    if (_currentlyPlayingTitle != liveWave.title &&
+        liveWave.title.isNotEmpty &&
+        liveWave.title != 'Ничего не играет') {
+      _currentlyPlayingTitle = liveWave.title;
+
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted && _audio.currentJoinedUserId == liveWave.id) {
+          _joinWave(liveWave, isUpdate: true);
+        }
+      });
+    }
   }
 
   @override
@@ -198,8 +266,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             return _WaveCard(
                               wave: wave,
                               isJoined: joinedId == wave.id,
-                              isLoading: _loadingJoin &&
-                                  _loadingWaveId == wave.id,
+                              isLoading:
+                                  _loadingJoin && _loadingWaveId == wave.id,
                               onTap: () => _joinWave(wave),
                             );
                           },
@@ -265,10 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 value: WaveSort.newest,
                 child: Text('Сначала новые'),
               ),
-              DropdownMenuItem(
-                value: WaveSort.genre,
-                child: Text('По жанру'),
-              ),
+              DropdownMenuItem(value: WaveSort.genre, child: Text('По жанру')),
               DropdownMenuItem(
                 value: WaveSort.username,
                 child: Text('По имени'),
@@ -363,8 +428,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ───────────────────────── Карточка волны ─────────────────────────
-
 class _WaveCard extends StatelessWidget {
   final Wave wave;
   final bool isJoined;
@@ -394,8 +457,9 @@ class _WaveCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _genreColor(wave.genre.id);
-    final initial =
-        wave.username.isNotEmpty ? wave.username[0].toUpperCase() : '?';
+    final initial = wave.username.isNotEmpty
+        ? wave.username[0].toUpperCase()
+        : '?';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -430,11 +494,7 @@ class _WaveCard extends StatelessWidget {
                           color: AppTheme.surface,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.graphic_eq,
-                          size: 14,
-                          color: color,
-                        ),
+                        child: Icon(Icons.graphic_eq, size: 14, color: color),
                       ),
                     ),
                 ],

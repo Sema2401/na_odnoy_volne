@@ -1,9 +1,13 @@
 import 'package:just_audio/just_audio.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class GlobalAudioService {
   static final GlobalAudioService _instance = GlobalAudioService._internal();
   factory GlobalAudioService() => _instance;
-  GlobalAudioService._internal();
+  GlobalAudioService._internal() {
+    _initPlayerListener();
+  }
 
   final AudioPlayer player = AudioPlayer(
     audioLoadConfiguration: AudioLoadConfiguration(
@@ -17,6 +21,40 @@ class GlobalAudioService {
   );
 
   String? currentJoinedUserId;
+
+  bool isBroadcasting = false;
+
+  void _initPlayerListener() {
+    player.playerStateStream.listen((state) {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (!isBroadcasting || user == null) return;
+
+      if (state.playing) {
+        FirebaseFirestore.instance
+            .collection('waves')
+            .doc(user.uid)
+            .update({
+              'is_playing': true,
+              'started_at': FieldValue.serverTimestamp(),
+              'position_sec': player.position.inSeconds,
+              'paused_at': null,
+            })
+            .catchError((_) {});
+      } else if (state.processingState == ProcessingState.ready ||
+          state.processingState == ProcessingState.idle) {
+        // Нажали Pause
+        FirebaseFirestore.instance
+            .collection('waves')
+            .doc(user.uid)
+            .update({
+              'is_playing': false,
+              'paused_at': FieldValue.serverTimestamp(),
+            })
+            .catchError((_) {});
+      }
+    });
+  }
 
   Future<void> playTrack(String url, int positionSec) async {
     await player.stop();

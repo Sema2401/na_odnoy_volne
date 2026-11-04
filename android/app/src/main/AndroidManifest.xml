@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
     
     <application
@@ -9,6 +8,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -33,13 +33,13 @@
             android:value="2" />
 
         <service android:name="com.gomes.nowplaying.NowPlayingListenerService"
-         android:label="NowPlayingListenerService"
-         android:exported="true"
-         android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-         <intent-filter>
-         <action android:name="android.service.notification.NotificationListenerService" />
-          </intent-filter>
-          </service>
+        android:label="NowPlayingListenerService"
+        android:exported="true"
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+        </intent-filter>
+        </service>
     </application>
     
     <queries>
