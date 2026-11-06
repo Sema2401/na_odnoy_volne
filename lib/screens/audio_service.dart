@@ -21,13 +21,11 @@ class GlobalAudioService {
   );
 
   String? currentJoinedUserId;
-
   bool isBroadcasting = false;
 
   void _initPlayerListener() {
     player.playerStateStream.listen((state) {
       final user = FirebaseAuth.instance.currentUser;
-
       if (!isBroadcasting || user == null) return;
 
       if (state.playing) {
@@ -43,7 +41,6 @@ class GlobalAudioService {
             .catchError((_) {});
       } else if (state.processingState == ProcessingState.ready ||
           state.processingState == ProcessingState.idle) {
-        // Нажали Pause
         FirebaseFirestore.instance
             .collection('waves')
             .doc(user.uid)
@@ -59,18 +56,17 @@ class GlobalAudioService {
   Future<void> playTrack(String url, int positionSec) async {
     await player.stop();
 
-    await player.setUrl(url).timeout(const Duration(seconds: 20));
+    int targetPos = positionSec;
 
-    if (positionSec > 0) {
-      final dur = player.duration;
-      final target = (dur != null && positionSec >= dur.inSeconds)
-          ? dur.inSeconds - 1
-          : positionSec;
-      if (target > 0) {
-        try {
-          await player.seek(Duration(seconds: target));
-        } catch (_) {}
-      }
+    await player
+        .setUrl(
+          url,
+          initialPosition: Duration(seconds: targetPos > 0 ? targetPos : 0),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (targetPos > 0 && player.position.inSeconds < targetPos - 2) {
+      await player.seek(Duration(seconds: targetPos));
     }
 
     player.play();
